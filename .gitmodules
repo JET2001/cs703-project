@@ -1,0 +1,3 @@
+[submodule "rerm_code_sample"]
+	path = rerm_code_sample
+	url = https://github.com/JET2001/rerm_code_sample.git

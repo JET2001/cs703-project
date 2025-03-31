@@ -1,5 +1,7 @@
+cvxpy[MOSEK]==1.3.2
+dsp-cvxpy
 pandas
 numpy
 scikit-learn
 matplotlib
-ipykernel
+# ipykernel

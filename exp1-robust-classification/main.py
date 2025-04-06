@@ -17,48 +17,51 @@ columns_to_drop = ["Unnamed: 0", "room_type", "room_shared", "room_private", "ho
 filtered_df = read_and_filter_data(
     city_name=city_name,
     weekdays=True,
-    filter_price_upper=1000,
-    filter_price_lower=0,
-    filter_dist_upper=7,
+    filter_price_upper=1000, # upper price bound for filtering
+    filter_price_lower=0,   # lower price bound for filtering
+    filter_dist_upper=7,    # maximum distance from city center
     columns_to_drop=columns_to_drop
 )
 
 train_df, test_df = extract_train_df_test_df(
     df=filtered_df, 
-    num_train=num_train,
-    num_test=num_test,
-    rng=train_test_rng
+    num_train=num_train, # train set size
+    num_test=num_test, # test set size
+    rng=train_test_rng  
 )
 
 test_arr, test_prices = create_test_arr(test_df.drop(columns=["dist"]))
 
 # this is half the side length of the square that contains the location
+# TODO: Why half the side length?
 local_radius_const = 0.5
 mask_prob_arr = np.array([0,1.0])
 
 results = []
 rng = np.random.default_rng(0)
 
+# --------------------------------------------------------------------------------
 # solve problem with all latitude and longitude data present
 # i.e., no location feature information is masked
-mask_prob = 0.0
+mask_prob = 0.0 # all features unmasked
 masked_train_arr, train_prices, unmasked_train_df = mask_train_df(train_df, mask_prob, masked_features, rng)
 
 city_center = find_city_center(city=city_name)
 city_center_diag_matrix = create_diag_matrix(center=city_center)
 
 pred, intercept = solve_robust_prob(
-        A=masked_train_arr,
-        b=train_prices,
-        unmasked_A_df=unmasked_train_df,
-        use_city_center_constraint=False,
-        city_center=city_center,
-        city_center_diag_matrix=city_center_diag_matrix
+        A=masked_train_arr,                 # the masked training feature matrix
+        b=train_prices,                     # the training price vector
+        unmasked_A_df=unmasked_train_df,    # the original unmasked dataframe for extra constraints
+        use_city_center_constraint=False,   # do not include the circular (city center) constraint
+        city_center=city_center,            # city center coordinates
+        city_center_diag_matrix=city_center_diag_matrix # diagonal matrix for scaling distances
     )
 ols_test_error = mean_squared_error(pred=pred, intercept=intercept, feature_matrix=test_arr,
                                 response_vector=test_prices)
 print(ols_test_error)
 
+# --------------------------------------------------------------------------------
 # solve problem with no latitude and longitude data present
 # i.e., all location feature information is masked
 # solve with the two robust predictors
@@ -89,7 +92,7 @@ pred, intercept = solve_robust_prob(
     A=masked_train_arr,
     b=train_prices,
     unmasked_A_df=unmasked_train_df,
-    use_city_center_constraint=True,
+    use_city_center_constraint=True,## main difference, everything else is the same
     city_center=city_center,
     city_center_diag_matrix=city_center_diag_matrix,
     use_grid = create_local_radius_centers_diags(masked_train_arr, unmasked_train_df, local_radius_const, rng, grid=True)
@@ -98,14 +101,14 @@ square_and_circle_test_error = mean_squared_error(pred=pred, intercept=intercept
                                 response_vector=test_prices)
 results.append((square_and_circle_test_error - ols_test_error) / ols_test_error * 100)
 print(square_and_circle_test_error)
-
+# -----------------------------------------------------------------------------------
 # drop latitude and longitude features, no robustness
 dropped_arr = masked_train_arr[:, :-2]
 assert True not in np.isnan(dropped_arr)
 assert np.shape(dropped_arr)[1] == np.shape(masked_train_arr)[1] - 2
 assert np.shape(dropped_arr)[0] == np.shape(masked_train_arr)[0]
 pred, intercept = solve_robust_prob(
-    A=dropped_arr,
+    A=dropped_arr, # removed latitude location
     b=train_prices,
     unmasked_A_df=unmasked_train_df,
     use_city_center_constraint=False,
@@ -116,7 +119,9 @@ pred_with_zeros = [i for i in pred]
 pred_with_zeros.append(0)
 pred_with_zeros.append(0)
 pred_with_zeros = np.array(pred_with_zeros)
-train_error = mean_squared_error(pred=pred_with_zeros, intercept=intercept, feature_matrix=np.array(unmasked_train_df.drop(columns=["dist"])),
+train_error = mean_squared_error(pred=pred_with_zeros, 
+                                 intercept=intercept, 
+                                 feature_matrix=np.array(unmasked_train_df.drop(columns=["dist"])),
                                  response_vector=train_prices)
 dropped_test_error = mean_squared_error(pred=pred_with_zeros, intercept=intercept, feature_matrix=test_arr,
                                 response_vector=test_prices)

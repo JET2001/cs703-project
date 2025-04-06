@@ -104,12 +104,15 @@ def mask_train_df(
     column_indices = np.array([train_df.columns.get_loc(column_name) for column_name in feature_names])
     for i in range(len(train_df.index)):
         new_row = np.array(train_df.iloc[i])
+        # with prob mask_prob, set the values at the specified feature indices to NaN
+        # essentially we can ignore this, since mask_prob was between 0 and 1 consistently
         if rng.binomial(n=1, p=mask_prob) == 1:
             new_row[column_indices] = np.NaN
-        res.append(new_row)
+        res.append(new_row) # append the (possibly modified) row to the results list
     
     assert np.sum(np.isnan(np.array(unmasked_train_df))) == 0
     return np.array(res), np.array(prices), unmasked_train_df
+
 
 def create_test_arr(test_df)-> np.ndarray:
     """
@@ -125,11 +128,11 @@ def create_test_arr(test_df)-> np.ndarray:
     return res, np.array(prices)
 
 def create_local_radius_centers_diags(
-    masked_train_arr: np.ndarray,
-    unmasked_train_df: pd.DataFrame,
-    local_radius: float,
-    rng: np.random.Generator,
-    grid: bool = False
+    masked_train_arr: np.ndarray,       # the masked training data (as a numpy array)
+    unmasked_train_df: pd.DataFrame,    # the unmasked dataframe
+    local_radius: float,                # half the side length of the square
+    rng: np.random.Generator,           
+    grid: bool = False                  # flag to indicate whether to generate and plot the grid vis
     ):
     """
     Creates grid used to define square robust uncertainty sets.
@@ -141,10 +144,11 @@ def create_local_radius_centers_diags(
     lat = unmasked_train_df["lat"].to_numpy()
 
 
-    grid_center = find_city_center('london')
-    d_mat = create_diag_matrix(grid_center)
+    grid_center = find_city_center('london') # city center coords are hardcoded
+    d_mat = create_diag_matrix(grid_center) # hardcoded from the city center
     
     # scale longitude and latitude steps to be the same in kilometers
+    # local_radius is the hyperparameter.
     lng_step = 2*local_radius / np.sqrt(d_mat[0, 0])
     lat_step = 2*local_radius / np.sqrt(d_mat[1, 1])
 
@@ -152,18 +156,30 @@ def create_local_radius_centers_diags(
     grid_map = {}
     for i in range(n):
         lng_i, lat_i = lng[i], lat[i]
+        # FLoor the normalized difference to determine the grid cell index for longitude
+        # and latitude
+        # this means their square uncertainty sets is relative to the city center
+        # it already gives some information about distance. 
         lng_low_ = floor((lng_i - grid_center[0]) / lng_step)
         lat_low_ = floor((lat_i - grid_center[1]) / lat_step)
-
+        # assert lng_low_ >= 0 
+        # assert lat_low_ >= 0
+        # Map the current index to its corresponding grid cell indices (tuple)
         grid_map[i] = (lng_low_, lat_low_)
     
     xs,ys = [],[] # build grid points for plotting
     for k,v in grid_map.items():
+        # For each grid cell, add coordinates for the vertical boundaries 
+        # gridcenter[0] = offset
+        # lng_step = step
         xs.append(v[0]*lng_step + grid_center[0])
         xs.append(v[0]*lng_step + grid_center[0])
         xs.append((v[0]+1)*lng_step + grid_center[0])
         xs.append((v[0]+1)*lng_step + grid_center[0])
         
+        # add coordinates for the horizontal boundaries (using lat_step)
+        # gridcenter[1] = offset
+        # lat_step = step
         ys.append(v[1]*lat_step + grid_center[1])
         ys.append((v[1]+1)*lat_step + grid_center[1])
         ys.append(v[1]*lat_step + grid_center[1])
@@ -171,7 +187,7 @@ def create_local_radius_centers_diags(
 
     if grid:
         # plotting stuff
-        BBox = (lng.min(),   lng.max(), lat.min(), lat.max())
+        BBox = (lng.min(), lng.max(), lat.min(), lat.max())
 
         #img = plt.imread('code/airbnb_exp/london_map.png')
 
@@ -226,16 +242,25 @@ def create_local_radius_centers_diags(
 
 def create_diag_matrix(center: np.ndarray)->np.ndarray:
     """
-    Creates the diagonal matrix that parameterizes the local distance around the center. Note that longitude is at coordinate
+    Creates the diagonal matrix that parameterizes the local distance around the center. 
+    Note that longitude is at coordinate
     index 0 and latitude is at coordinate index 1.
     
     :param center: a (2,) numpy array around which we locally approximate distance
 
     :return: the (2, 2) diagonal matrix
+
+    There is a general formula 
+    d_lon = 111.30 x cos(phi) x longitude value (km)
+    d_lat = 110.574 x sin(phi) (km)
+
+    This matrix is used to scale distances in longitude and latitude such (diff x)^T D (diff x)
     """
     assert np.shape(center) == (2,)
     ellipsoid_matrix = np.zeros((2, 2))
+    # Compute the scaling factor for longitude using the cosine adjustment (km / degree)
     ellipsoid_matrix[0, 0] = (111.30 * np.cos(np.deg2rad(center[1]))) ** 2
+    # set the scaling factor for latitude (km / degree)
     ellipsoid_matrix[1, 1] = 110.574 ** 2
     return ellipsoid_matrix
 

@@ -146,7 +146,7 @@ def solve_robust_prob(
     prob.solve(solver = cp.ECOS, verbose=True)
     return x.value, intercept.value[0]
 
-def distinguish_indices(a: np.ndarray)-> Tuple[np.ndarray, np.ndarray]
+def distinguish_indices(a: np.ndarray)-> Tuple[np.ndarray, np.ndarray]:
     """
     Finds the indices where the vector a has Nan entries vs observed entries, and then returns each.
 

@@ -2,11 +2,71 @@ import numpy as np
 import cvxpy as cp
 import pandas as pd
 import dsp                                     # disciplined saddle point programming
-from typing import Tuple
-
+from typing import Dict, List, Tuple, Union
+from .utils import Dataset
+from .uncertainty import BaseUncertainty
 from cvxpy.transforms.suppfunc import SuppFunc # Import SuppFunc to transform support function constraints
 
+def solve_robust_classification(
+        dataset: Dataset,
+        uncertainty_info: List[Tuple[str, BaseUncertainty]],
+):
+    '''
+    uncertainty_info is encoded as (column index, encoding map)
+
+    A - design matrix
+    b - labels
+    '''
+    
+    n, d = dataset.X_train.to_numpy().shape
+    assert dataset.y_train.to_numpy().shape == (n,)
+    for item in uncertainty_info:
+        assert item[0] in dataset.X_train.columns, item[0]
+            
+    x = cp.Variable(d)
+    intercept = cp.Variable(1)
+    p = cp.Variable(n)
+    constraints = [p >= 0]
+    A = dataset.X_train.to_numpy()
+    b = dataset.y_train.to_numpy()
+    colidx_uncertainty = []
+    xcols = list(dataset.X_train.columns)
+    for item in uncertainty_info:
+        col_idx = xcols.index(item[0])
+        colidx_uncertainty.append(col_idx)
+    for i in range(n):
+        a = A[i]
+        if colidx_uncertainty == []:
+            constraints.append(cp.abs(cp.sum(cp.multiply(a,x)) + intercept - b[i]) <= p[i])
+        else:
+            y_loc1= dsp.LocalVariable(d)
+            G_constraints1 = []
+
+            for col_idx in range(d):
+                if col_idx not in colidx_uncertainty:
+                    G_constraints1.append(y_loc1[col_idx] == a[col_idx])
+            # Consider the uncertainty sets
+            for col_idx, item in zip(colidx_uncertainty, uncertainty_info):
+                uncertainty_enc = item[1]
+                x_enc = A[i, col_idx]
+                if item[2] == 'Box':
+                    G_constraints1 += [
+                        y_loc1[col_idx] <= uncertainty_enc[x_enc], y_loc1[col_idx] >= uncertainty_enc[x_enc-1]
+                    ]
+                else:
+                    raise NotImplementedError
+                
+            f1 = dsp.saddle_inner(-x, y_loc1)
+            G1 = SuppFunc(y_loc1, G_constraints1)(-x)
+            constraints.append(G1 + intercept - b[i] <= -p[i])
+    obj = cp.Minimize(cp.log)
+
+
+    pass
+    
+
 def solve_robust_prob(
+        
         A: np.ndarray,                          # feature matrix
         b: np.ndarray,                          # response vector
         unmasked_A_df: pd.DataFrame,            # dataframe with complete (unmasked) features; used for extra constraints
@@ -98,37 +158,10 @@ def solve_robust_prob(
 
             # use cvxpy suppfunc transform to compute the support function of the uncertainty sets
             # defined by the local variables and constraints.
-            # suppfunc (y_loc1, G_constraints1)(x) returns the worst case value of y_loc1^T * x under
-            # G constraints1
-            # in convex analysis, the support function of a convex set C in the direction x is defined as:
-            # sigma_c(x) = sup_{y \in C}(y^T theta)
-            # this quantity tells you the largest value that the linear function y^T theta can take when y is
-            # restricted to C.
-
-            # in our code some samples have missing feature entries, and we don't know their exact values - but
-            # we know they lie in some uncertainty sets defined by constraints.
-            # to handle this uncertainty, we create two local variables y_loc1 and y_loc2, which represent
-            # possible imputations of the missing values. t
-            # the constraints G_constraints1  and G_constraints2 define the uncertainty set C for these missing entries
-            
-            # the fllowing code:
-            # SuppFUnc... computes the support function of the uncertainty set defined by y_loc1 and the constraints
-            # in G_constraints1, in the direction of the regression coefficients x. In other words, it returns
-            # G1 = sup_{y in C1} y^T x # largest possible value
-            # G2 = sup_{y in C2} y^T (-x) # this is equivalent to taking the inf_{y in C_2} y^T x
             G1 = SuppFunc(y_loc1, G_constraints1)(x)
             G2 = SuppFunc(y_loc2, G_constraints2)(-x)
 
             # for one particular sample, the measured features are incomplete.
-            # instead of having a fixed value for y, (the missing entries), we know only that y lies in some set C.
-            # by taking the support function in the direction x (or -x), we compute the worst case contribution of
-            # the missing features to the prediction x^Ty
-
-            # add robust contraints for the i-th sample
-            # these ensure that even in the worst case over the uncertainty sets
-            # the absolute error is bounded by the slack variable p[i]
-            # p[i] is a slack variable, so we basically penalize for exceeding p[i]
-            
             # this is quite like the assignment - we need to put constraints on |prediction - price_vector| <= p[i] for the i-th sample
             # the upper bound constraint here is that the residual (sup_{y in C1} [x^T y] + intercept - b[i]) does not exceed p[i] (slack)
             constraints.append(G1 + intercept - b[i] <= p[i])

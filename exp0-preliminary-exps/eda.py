@@ -1,3 +1,4 @@
+#%% 
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -24,3 +25,14 @@ for i in range(10):
 
 plt.tight_layout()
 plt.show()
+# %%
+type(X), type(y)
+np.savez("./breast-cancer.npz", X=X, y=y, feature_names = feature_names)
+# %%
+import pandas as pd
+X = data.data
+df = pd.DataFrame(X, columns = ['_'.join(x.split()) for x in feature_names])
+df['label'] = y
+df.to_csv("breast-cancer-data.csv")
+# %%
+df.to

@@ -95,12 +95,13 @@ def solve_robust_classification(
                 uncertainty_enc = item.enc
                 rhs = uncertainty_enc['enc']
                 ideal_data = uncertainty_enc['ideal']
+                ord = uncertainty_enc['ord']
                 # print(df.index.tolist()[i]
                 # print("train index at i:", train_row_idxs[i])
                 # print("is in radius_train?", train_row_idxs[i] in radius_train)
                 ai = train_row_idxs[i]
                 G_constraints_i += [
-                    cp.norm(y_loc[norm_cols] - ideal_data[ai], 1) <= rhs[ai]
+                    cp.norm(y_loc[norm_cols] - ideal_data[ai], ord) <= rhs[ai]
                 ]
                 # if train_row_idxs[i] in radius_train:
                 #     ri = radius_train[train_row_idxs[i]]
@@ -122,7 +123,7 @@ def solve_robust_classification(
     print("train ce_loss = ", prob.value/n)
     print("theta = ", theta.value)
     print("intercept =  ", intercept.value[0])
-    return theta.value, intercept.value[0]
+    return theta.value, intercept.value[0], prob.value/n
 
 def evaluate_ce_loss(
     dataset: Dataset,

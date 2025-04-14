@@ -79,7 +79,7 @@ class BoxUncertainty(BaseUncertainty):
     def get_name(self):
         return "Box"
 
-class IrregularityNormUncertainty(BaseUncertainty):
+class MeanNormUncertainty(BaseUncertainty):
     '''
     This uncertainty set adds rows to the dataset.
     Requires mean_perimeter, and mean_compactness to be in the dataset.
@@ -103,25 +103,21 @@ class IrregularityNormUncertainty(BaseUncertainty):
         self.features = params.get('features')
         self.random_state = params.get('random_state')
         assert self.test_size is not None
-        df = pd.read_csv(self.data_path)[['mean_radius', 'mean_texture', 'label']]
+        df = pd.read_csv(self.data_path)[['mean_area', 'mean_perimeter', 'label']]
         df['label'] = [2*y -1 for y in df['label']]
         X = df.copy().drop('label', axis = 1)
-        # X = df.copy()
         y = df.label
         
-        X_train, X_test, _, _ = train_test_split(
+        X_train,_, _, _ = train_test_split(
             X, y, 
             test_size = self.test_size, 
             random_state=self.random_state,
             stratify=y
         )
-        sc = StandardScaler().fit(X_train) # fit only on the benign class in the train set.
-        X_train_norm = pd.DataFrame(sc.transform(X_train), columns = X.columns)
-        X_test_norm = pd.DataFrame(sc.transform(X_test), columns = X.columns)
         
-        Xbar_train = X_train_norm.mean()
-        self.res_train = np.linalg.norm(X_train_norm.values - Xbar_train.values, axis = 1)
-        self.res_test = np.linalg.norm(X_test_norm.values - Xbar_train.values, axis = 1)
+        Xbar_train = X_train.mean()
+        df = df.drop('label', axis = 1)
+        self.enc = np.linalg.norm(df.values - Xbar_train.values, 2)
         self.transformed = copy.deepcopy(dataset)
         # self.transformed.X_train[self.col_name] = res_train
         # self.transformed.X_test[self.col_name] = res_test
@@ -134,13 +130,13 @@ class IrregularityNormUncertainty(BaseUncertainty):
         return self.transformed
     
     def get_uncertainty_enc(self):
-        return {'center': self.center, 'radius_train' : self.res_train, 'radius_test': self.res_test }
+        return {'center': self.center, 'radius': self.enc, 'ord': 2 }
     
     def get_name(self):
         return "Norm"
     
     def requires_features(self):
-        return ["mean_radius", "mean_texture"]
+        return ["mean_area", "mean_perimeter"]
 
 class BenignNormUncertainty(BaseUncertainty):
     '''
@@ -159,7 +155,6 @@ class BenignNormUncertainty(BaseUncertainty):
         df = pd.read_csv(self.data_path)[['mean_perimeter', 'mean_area', 'label']]
         df['label'] = [2*y -1 for y in df['label']]
         X = df.copy().drop('label', axis = 1)
-        # X = df.copy()
         y = df.label
         
         X_train, X_test, y_train, y_test = train_test_split(
@@ -168,18 +163,13 @@ class BenignNormUncertainty(BaseUncertainty):
             random_state=self.random_state,
             stratify=y
         )
-        sc = StandardScaler().fit(X_train) # fit only on the benign class in the train set.
-        X_train_norm = pd.DataFrame(sc.transform(X_train), columns = X.columns)
-        X_test_norm = pd.DataFrame(sc.transform(X_test), columns = X.columns)
-        
-        df_train = X_train_norm.merge(y_train, how = 'inner', left_index = True, right_index = True)
+        df_train = X_train.merge(y_train, how = 'inner', left_index = True, right_index = True)
         df_train = df_train[df_train.label == -1].drop('label', axis = 1)
         # self.res_train = {}
         self.center = df_train.mean().values
         # print("self.center = ", self.center)
         
         res_train = np.linalg.norm(df_train.values - self.center, axis = 1)
-        # self.res_test = np.linalg.norm(X_test_norm.values - self.center, axis = 1)
         self.res_train = {idx: x for idx, x in zip (df_train.index.tolist(), res_train)}
         print(self.res_train)
         
@@ -194,7 +184,7 @@ class BenignNormUncertainty(BaseUncertainty):
         return self.transformed
     
     def get_uncertainty_enc(self):
-        return {'center': self.center, 'radius_train' : self.res_train }
+        return {'center': self.center, 'radius_train' : self.res_train, 'ord': 2 }
     
     def get_name(self):
         return "Norm"
@@ -228,17 +218,13 @@ class MalignantNormUncertainty(BaseUncertainty):
             random_state=self.random_state,
             stratify=y
         )
-        sc = StandardScaler().fit(X_train) # fit only on the benign class in the train set.
-        X_train_norm = pd.DataFrame(sc.transform(X_train), columns = X.columns)
-        X_test_norm = pd.DataFrame(sc.transform(X_test), columns = X.columns)
         
-        df_train = X_train_norm.merge(y_train, how = 'inner', left_index = True, right_index = True)
+        df_train = X_train.merge(y_train, how = 'inner', left_index = True, right_index = True)
         df_train = df_train[df_train.label == 1].drop('label', axis = 1)
         # self.res_train = {}
         self.center = df_train.mean().values
         
         res_train = np.linalg.norm(df_train.values - self.center, axis = 1)
-        res_test = np.linalg.norm(X_test_norm.values - self.center, axis = 1)
         self.res_train = {idx: x for idx, x in zip (df_train.index.tolist(), res_train)}
         # self.res_test = {idx : x for idx, x in zip (df)}
         
@@ -252,7 +238,7 @@ class MalignantNormUncertainty(BaseUncertainty):
         return self.transformed
     
     def get_uncertainty_enc(self):
-        return {'center': self.center, 'radius_train' : self.res_train }
+        return {'center': self.center, 'radius_train' : self.res_train, 'ord': 2 }
     
     def get_name(self):
         return "Norm"
@@ -284,7 +270,7 @@ class PerimeterUncertainty(BaseUncertainty):
         return self.transformed
     
     def get_uncertainty_enc(self):
-        return {'enc' : self.enc, 'ideal': self.perimeter_ideal } 
+        return {'enc' : self.enc, 'ideal': self.perimeter_ideal, 'ord': 1 } 
     
     def get_name(self):
         return "L1-Norm"
@@ -310,7 +296,7 @@ class AreaUncertainty(BaseUncertainty):
         return self.transformed
     
     def get_uncertainty_enc(self):
-        return {'enc' : self.enc, 'ideal': self.area_ideal } 
+        return {'enc' : self.enc, 'ideal': self.area_ideal, 'ord': 1 } 
     
     def get_name(self):
         return "L1-Norm"
@@ -345,7 +331,7 @@ class CircleUncertainty(BaseUncertainty):
         return {'enc' : self.enc, 'ideal': self.ideal_data } 
     
     def get_name(self):
-        return "Norm"
+        return "L1-Norm"
     
     def requires_features(self):
         return ["mean_area", "mean_perimeter"]

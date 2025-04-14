@@ -37,11 +37,12 @@ class DataProcessing:
         train_rows = X_train.index.tolist()
         test_rows = X_test.index.tolist()
         
-        sc = StandardScaler().fit(X_train)
-        X_train_norm = pd.DataFrame(np.clip(sc.transform(X_train), a_min = -2, a_max = 2), columns = X_train.columns)
-        X_test_norm = pd.DataFrame(np.clip(sc.transform(X_test), a_min = -2, a_max = 2), columns = X_train.columns)
-        self._dataset = Dataset(X_train_norm, X_test_norm, y_train, y_test, train_rows, test_rows)
-        
+        # sc = StandardScaler().fit(X_train)
+        # X_train_norm = pd.DataFrame(np.clip(sc.transform(X_train), a_min = -2, a_max = 2), columns = X_train.columns)
+        # X_test_norm = pd.DataFrame(np.clip(sc.transform(X_test), a_min = -2, a_max = 2), columns = X_train.columns)
+        # load X_test_norm twice, one of them is for actual prediction the other is for robustness.
+        # self._dataset = Dataset(X_train_norm, X_test_norm, X_test_norm, y_train, y_test, train_rows, test_rows)
+        self._dataset = Dataset(X_train, X_test, X_test.copy(), y_train, y_test, train_rows, test_rows)
 
         self.uncertainty_features_list = hyperparams.get('uncertainty_features_list', [])
         assert isinstance(self.uncertainty_features_list, list), type(self.uncertainty_features_list)

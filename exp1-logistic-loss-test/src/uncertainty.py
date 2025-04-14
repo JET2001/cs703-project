@@ -64,10 +64,11 @@ class BoxUncertainty(BaseUncertainty):
         
         for x in X_test_subset.values:
             bin_no = bisect.bisect_left(self.bins, x)
-            res_test.append((self.bins[bin_no-1] + self.bins[bin_no])/2)
-        X_test_transformed = dataset.X_test.copy()
+            res_test.append(bin_no)
+        X_test_transformed = dataset.robust_X_test.copy()
         X_test_transformed[col_name] = res_test
-        self.transformed = Dataset(X_train_transformed, dataset.X_test, dataset.y_train, dataset.y_test, dataset.train_rows, dataset.test_rows)
+        
+        self.transformed = Dataset(X_train_transformed, dataset.X_test, X_test_transformed, dataset.y_train, dataset.y_test, dataset.train_rows, dataset.test_rows)
 
     def get_transformed_dataset(self):
         return self.transformed
@@ -179,7 +180,7 @@ class BenignNormUncertainty(BaseUncertainty):
         
         res_train = np.linalg.norm(df_train.values - self.center, axis = 1)
         # self.res_test = np.linalg.norm(X_test_norm.values - self.center, axis = 1)
-        self.res_train = {idx: 1.05*x for idx, x in zip (df_train.index.tolist(), res_train)}
+        self.res_train = {idx: x for idx, x in zip (df_train.index.tolist(), res_train)}
         print(self.res_train)
         
         
@@ -235,13 +236,11 @@ class MalignantNormUncertainty(BaseUncertainty):
         df_train = df_train[df_train.label == 1].drop('label', axis = 1)
         # self.res_train = {}
         self.center = df_train.mean().values
-        print("self.center = ", self.center)
         
         res_train = np.linalg.norm(df_train.values - self.center, axis = 1)
-        # self.res_test = np.linalg.norm(X_test_norm.values - self.center, axis = 1)
-        self.res_train = {idx: 1.05*x for idx, x in zip (df_train.index.tolist(), res_train)}
-        print(self.res_train)
-        
+        res_test = np.linalg.norm(X_test_norm.values - self.center, axis = 1)
+        self.res_train = {idx: x for idx, x in zip (df_train.index.tolist(), res_train)}
+        # self.res_test = {idx : x for idx, x in zip (df)}
         
         self.transformed = copy.deepcopy(dataset)
         # self.transformed.X_train[self.col_name] = res_train
@@ -254,6 +253,96 @@ class MalignantNormUncertainty(BaseUncertainty):
     
     def get_uncertainty_enc(self):
         return {'center': self.center, 'radius_train' : self.res_train }
+    
+    def get_name(self):
+        return "Norm"
+    
+    def requires_features(self):
+        return ["mean_area", "mean_perimeter"]
+
+class PerimeterUncertainty(BaseUncertainty):
+    
+    def __init__(self, dataset: Dataset, params: Dict):
+        super().__init__(params)
+        self.col_name = 'mean_perimeter'
+        self.data_path = params.get('data_path')
+        assert self.data_path is not None
+        df = pd.read_csv(self.data_path, index_col = False)[['mean_perimeter', 'mean_radius']]
+        df['perimeter_ideal'] = [2 * np.pi * r for r in df.mean_radius]
+        # area_ideal = df.mean_radius
+        self.enc = [abs(x - y) for x, y in zip(df.mean_perimeter, df.perimeter_ideal)]
+        self.perimeter_ideal = df.perimeter_ideal
+        
+        
+        self.transformed = copy.deepcopy(dataset)
+        # self.transformed.X_train[self.col_name] = res_train
+        # self.transformed.X_test[self.col_name] = res_test
+        # # self.transformed.X_train['Irregularity'] = res_train
+        # # self.transformed.X_test['Irregularity'] = res_test
+
+    def get_transformed_dataset(self):
+        return self.transformed
+    
+    def get_uncertainty_enc(self):
+        return {'enc' : self.enc, 'ideal': self.perimeter_ideal } 
+    
+    def get_name(self):
+        return "L1-Norm"
+    
+    def requires_features(self):
+        return ["mean_perimeter"]
+    
+class AreaUncertainty(BaseUncertainty):
+    
+    def __init__(self, dataset: Dataset, params: Dict):
+        super().__init__(params)
+        self.col_name = 'mean_radius'
+        self.data_path = params.get('data_path')
+        assert self.data_path is not None
+        df = pd.read_csv(self.data_path)[['mean_area', 'mean_radius']]
+        df['area_ideal'] = [np.pi * r * r for r in df.mean_radius]
+        self.area_ideal = df.area_ideal
+        self.enc = [abs(x - y) for x, y in zip(df.mean_area, df.area_ideal)]
+        
+        self.transformed = copy.deepcopy(dataset)
+
+    def get_transformed_dataset(self):
+        return self.transformed
+    
+    def get_uncertainty_enc(self):
+        return {'enc' : self.enc, 'ideal': self.area_ideal } 
+    
+    def get_name(self):
+        return "L1-Norm"
+    
+    def requires_features(self):
+        return ["mean_area"]
+
+class CircleUncertainty(BaseUncertainty):
+    
+    def __init__(self, dataset: Dataset, params: Dict):
+        super().__init__(params)
+        self.col_name = None
+        self.data_path = params.get('data_path')
+        assert self.data_path is not None
+        df = pd.read_csv(self.data_path)[['mean_area','mean_perimeter', 'mean_radius']]
+        df['area_ideal'] = [np.pi * r * r for r in df.mean_radius]
+        df['perimeter_ideal'] = [2 * np.pi * r for r in df.mean_radius]
+        self.area_ideal = df.area_ideal
+        self.perimeter_ideal = df.perimeter_ideal
+        
+        data = df[['mean_area','mean_perimeter']].values
+        self.ideal_data = df[['area_ideal', 'perimeter_ideal']].values
+        self.enc = np.linalg.norm(data - self.ideal_data, ord = 1, axis = 1)
+        
+        # self.ideal_data = ideal_data
+        self.transformed = copy.deepcopy(dataset)
+
+    def get_transformed_dataset(self):
+        return self.transformed
+    
+    def get_uncertainty_enc(self):
+        return {'enc' : self.enc, 'ideal': self.ideal_data } 
     
     def get_name(self):
         return "Norm"

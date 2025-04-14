@@ -24,7 +24,30 @@ for i in range(10):
     axes[i].legend()
 
 plt.tight_layout()
-plt.show()
+plt.savefig("out/out.pdf")
+
+# %%
+import pandas as pd
+X = data.data; y = data.target; feature_names = data.feature_names
+XX = pd.DataFrame(X, columns = feature_names)
+XX.describe()
+
+# %%
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
+
+X = data.data; y = data.target; feature_names = data.feature_names
+XX = pd.DataFrame(X, columns = feature_names)[['mean area', 'mean perimeter']] 
+
+X_train, X_test, y_train, y_test = train_test_split(XX, y, test_size = 0.3, random_state=42)
+sc = StandardScaler().fit(X_train)
+X_train_norm = sc.transform(X_train)
+X_test_norm = sc.transform(X_test)
+lr = LogisticRegression().fit(X_train_norm, y_train)
+lr.coef_
+
 # %%
 type(X), type(y)
 np.savez("./breast-cancer.npz", X=X, y=y, feature_names = feature_names)

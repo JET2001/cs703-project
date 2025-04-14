@@ -14,7 +14,6 @@ if __name__ == '__main__':
         os.mkdir("./out")
     except FileExistsError as e:
         pass
-    box_size_list = np.arange(10, 500, 20)
     results = {}
     ########################################################################
     # No Uncertainty Test Error

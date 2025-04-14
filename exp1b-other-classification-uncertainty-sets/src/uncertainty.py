@@ -238,7 +238,7 @@ class MalignantNormUncertainty(BaseUncertainty):
         return self.transformed
     
     def get_uncertainty_enc(self):
-        return {'center': self.center, 'radius_train' : self.res_train, 'ord': 2 }
+        return {'center': self.center, 'enc' : self.res_train, 'ord': 2 }
     
     def get_name(self):
         return "Norm"
@@ -282,7 +282,7 @@ class AreaUncertainty(BaseUncertainty):
     
     def __init__(self, dataset: Dataset, params: Dict):
         super().__init__(params)
-        self.col_name = 'mean_radius'
+        self.col_name = 'mean_area'
         self.data_path = params.get('data_path')
         assert self.data_path is not None
         df = pd.read_csv(self.data_path)[['mean_area', 'mean_radius']]
@@ -328,10 +328,10 @@ class CircleUncertainty(BaseUncertainty):
         return self.transformed
     
     def get_uncertainty_enc(self):
-        return {'enc' : self.enc, 'ideal': self.ideal_data } 
+        return {'enc' : self.enc, 'ideal': self.ideal_data , 'ord': 1} 
     
     def get_name(self):
-        return "L1-Norm"
+        return "Norm"
     
     def requires_features(self):
         return ["mean_area", "mean_perimeter"]

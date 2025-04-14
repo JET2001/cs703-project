@@ -23,7 +23,7 @@ def solve_robust_classification(
     n, d = dataset.X_train.to_numpy().shape
     assert dataset.y_train.to_numpy().shape == (n,)
     for item in uncertainty_info:
-        if item.col_name is None and item.name == "Norm": 
+        if item.col_name is None and "Norm" in item.name: 
             continue
         assert item.col_name in dataset.X_train.columns, item.col_name
             
@@ -85,29 +85,32 @@ def solve_robust_classification(
                     raise NotImplementedError
                 
             for item in uncertainty_info:
-                if item.name != 'Norm': 
+                if 'Norm' not in item.name: 
                     continue
+
                 features = item.requires
                 norm_cols = []
                 for col_name in features:
                     col_idx = xcols.index(col_name)
                     norm_cols.append(col_idx)
                 uncertainty_enc = item.enc
-                rhs = uncertainty_enc['enc']
-                ideal_data = uncertainty_enc['ideal']
-                ord = uncertainty_enc['ord']
-                # print(df.index.tolist()[i]
-                # print("train index at i:", train_row_idxs[i])
-                # print("is in radius_train?", train_row_idxs[i] in radius_train)
-                ai = train_row_idxs[i]
-                G_constraints_i += [
-                    cp.norm(y_loc[norm_cols] - ideal_data[ai], ord) <= rhs[ai]
-                ]
-                # if train_row_idxs[i] in radius_train:
-                #     ri = radius_train[train_row_idxs[i]]
-                #     G_constraints_i += [
-                #         cp.norm(y_loc[norm_cols] - mean_vec, 2) <= ri
-                #     ]
+                if 'ideal' in uncertainty_enc:
+                    rhs = uncertainty_enc['enc']
+                    ideal_data = uncertainty_enc['ideal']
+                    ord = uncertainty_enc['ord']
+                    ai = train_row_idxs[i]
+                    G_constraints_i += [
+                        cp.norm(y_loc[norm_cols] - ideal_data[ai], ord) <= rhs[ai]
+                    ]
+                elif 'radius_train' in uncertainty_enc:
+                    radius_train = uncertainty_enc['radius_train']
+                    center = uncertainty_enc['center']
+                    ord = uncertainty_enc['ord']
+                    if train_row_idxs[i] in radius_train:
+                        ri = radius_train[train_row_idxs[i]]
+                        G_constraints_i += [
+                            cp.norm(y_loc[norm_cols] - center, ord) <= ri
+                        ]
                     
             Gi = SuppFunc(y_loc, G_constraints_i)(-b[i] * theta)
             constraints.append(z[i] <= b[i] * intercept - Gi)

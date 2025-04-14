@@ -108,6 +108,7 @@ if __name__ == '__main__':
                 'high': 200 + 20
             }),
             (CircleUncertainty, {
+                'col_name': None,
                 'data_path':"./data_files/breast-cancer-data.csv"
             })
         ]
@@ -156,8 +157,8 @@ if __name__ == '__main__':
     theta, intercept, train_loss = solve_robust_classification(dataset, uncertainty_info)    
     loss = ce_loss(theta, intercept, dataset.X_test.to_numpy(), dataset.y_test.to_numpy())
     print("ce_loss = ", loss)
-    results['(B1, E1a), (B2, E1b)'] = loss
-    train_results['(B1, E1a), (B2, E1b)'] = train_loss
+    results['(B1, E2a), (B2, E2b)'] = loss
+    train_results['(B1, E2a), (B2, E2b)'] = train_loss
     ##########################################################################
     # Benign Norm, Malignant Norm
     hyperparams = {
@@ -179,10 +180,14 @@ if __name__ == '__main__':
                 'high': 200 + 20
             }),
             (BenignNormUncertainty, {
-                'data_path':"./data_files/breast-cancer-data.csv"
+                'data_path':"./data_files/breast-cancer-data.csv",
+                "test_size": 0.3,
+                "random_state": 42
             }),
             (MalignantNormUncertainty, {
-                'data_path':"./data_files/breast-cancer-data.csv"
+                'data_path':"./data_files/breast-cancer-data.csv",
+                "test_size": 0.3,
+                "random_state": 42
             })
         ]
     }
@@ -230,41 +235,51 @@ if __name__ == '__main__':
     results['B1, B2, E4'] = loss
     train_results['B1, B2, E4'] = train_loss
     
+    ###########################################################################
+    runs = ['Drop', 'B1, B2', 'B1, B2, E1', '(B1, E2a), (B2, E2b)', '(B1, E3a), (B2, E3b)', 'B1, B2, E4']
     
     percent_list = []
     keys_list = []
-    for key in ['Drop', 'B1, B2', 'B1, B2, E1', '(B1, E2a), (B2, E2b)', '(B1, E3a), (B2, E3b)', 'B1, B2, E4']:
+    for key in runs:
         percent_list.append((results[key] - results['No Uncertainty'])/ results[key] * 100)
-    results_list = [results[x] for x in ['Drop', 'B1, B2', 'B1, B2, E1', '(B1, E2a), (B2, E2b)', '(B1, E3a), (B2, E3b)', 'B1, B2, E4']:]
+    results_list = [results[x] for x in runs]
     
      
-    plt.figure(figsize = (7,5))
-    plt.bar(x = ['Drop', 'B1, B2', 'B1, B2, E1', '(B1, E2a), (B2, E2b)', '(B1, E3a), (B2, E3b)', 'B1, B2, E4'], height = results_list)
+    plt.figure(figsize = (12,5))
+    plt.bar(x = runs, height = results_list)
     plt.title("Cross Entropy loss on Test Set")
     plt.ylabel("CE Loss")
+    plt.tight_layout()
     plt.savefig(f"out/{time_str}-test-ce-loss.pdf")
     
-    plt.figure(figsize = (7,5))
-    plt.bar(x = ['Drop', 'B1, B2', 'B1, B2, E1', '(B1, E2a), (B2, E2b)', '(B1, E3a), (B2, E3b)', 'B1, B2, E4'], height = percent_list)
+    plt.figure(figsize = (12,5))
+    plt.bar(x = runs, height = percent_list)
     plt.title(r"% increase in cross entropy loss on Test Set")
     plt.ylabel("% increase in CE loss")
+    plt.tight_layout()
     plt.savefig(f"out/{time_str}-inc-test-ce-loss.pdf")
     
     percent_list = []
     keys_list = []
-    for key in ['Drop', 'B1, B2', 'B1, B2, E1', '(B1, E2a), (B2, E2b)', '(B1, E3a), (B2, E3b)', 'B1, B2, E4']:
-        percent_list.append((results[key] - results['No Uncertainty'])/ results[key] * 100)
-    results_list = [results[x] for x in ['No Uncertainty', 'Drop', 'Box', 'Box n Norm']]
+    for key in runs:
+        percent_list.append((train_results[key] - train_results['No Uncertainty'])/ results[key] * 100)
+    results_list = [train_results[x] for x in runs]
     
      
-    plt.figure(figsize = (7,5))
-    plt.bar(x = ['Drop', 'B1, B2', 'B1, B2, E1', '(B1, E2a), (B2, E2b)', '(B1, E3a), (B2, E3b)', 'B1, B2, E4'], height = results_list)
-    plt.title("Cross Entropy loss on Test Set")
+    plt.figure(figsize = (12,5))
+    plt.bar(x = runs, height = results_list)
+    plt.title("Cross Entropy loss on Train Set")
     plt.ylabel("CE Loss")
-    plt.savefig(f"out/{time_str}-ce-loss.pdf")
+    plt.tight_layout()
+    plt.savefig(f"out/{time_str}-train-ce-loss.pdf")
     
-    plt.figure(figsize = (7,5))
-    plt.bar(x = ['Drop', 'B1, B2', 'B1, B2, E1', '(B1, E2a), (B2, E2b)', '(B1, E3a), (B2, E3b)', 'B1, B2, E4']:, height = percent_list)
-    plt.title(r"% increase in cross entropy loss on Test Set")
+    plt.figure(figsize = (12,5))
+    plt.bar(x = runs, height = percent_list)
+    plt.title(r"% increase in cross entropy loss on Train Set")
     plt.ylabel("% increase in CE loss")
-    plt.savefig(f"out/{time_str}-inc-ce-loss.pdf")
+    plt.tight_layout()
+    plt.savefig(f"out/{time_str}-inc-train-ce-loss.pdf")
+    with open(f"logs/{time_str}.txt", "w") as f:
+        for key in runs:
+            f.write(f"{key}: Test Loss: {results[key]}, Train Loss: {train_results[key]}")
+            f.write("\n")
